@@ -3,8 +3,8 @@
 - [ ] `python backend/snapshot.py` run successfully and `backend/data/` committed (needs internet)
 - [ ] App runs locally: `docker compose up --build`
 - [ ] Public GitHub repo with an anonymous random name (e.g. "kjhwr"); README has no personal details
-- [ ] README has: files and directories, how to start, Heroku link, AI-use disclosure (all included; add the link)
-- [ ] Deployed on Heroku (or Vercel) and opens in incognito
+- [ ] README has: files and directories, how to start, live link, AI-use disclosure (all included; add the link)
+- [ ] Deployed on Vercel (free) and opens in incognito; `/api/health` shows status ready
 - [ ] Unlisted YouTube video, max 10 minutes: Part 1 customer pitch (max 5 min overview), Part 2 tech review (max 5 min overview); script in docs/VIDEO_SCRIPT.md
 - [ ] Open every URL (video, repo, app) in incognito before submitting
 - [ ] Submit everything at https://forms.cloud.microsoft/r/FTX6K2bbnU

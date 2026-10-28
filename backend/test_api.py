@@ -86,3 +86,13 @@ def test_security_headers_present(client):
     h = client.get("/api/health").headers
     assert h["x-content-type-options"] == "nosniff" and h["x-frame-options"] == "DENY"
     assert "default-src 'self'" in h["content-security-policy"] and h["cache-control"] == "no-store"
+
+
+def test_first_request_loads_data_when_idle(client):
+    import main
+    saved = dict(main.STATE)
+    main.STATE.update(status="idle", error=None, A=None, F=None)
+    try:
+        assert client.get("/api/health").json()["status"] == "ready"
+    finally:
+        main.STATE.update(saved)

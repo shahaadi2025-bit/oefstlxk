@@ -7,3 +7,6 @@ frontend/dist
 .venv
 venv
 backend/static
+.vercel
+
+.vercel

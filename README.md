@@ -5,7 +5,7 @@ Web app for a UK utility's day-ahead power buying team. Using only Elexon BMRS n
 1. **Which wind forecast did we actually have when we had to decide?**
 2. **How accurate has that forecast been, and how much cover does that imply?**
 
-**Live app:** <ADD HEROKU LINK>  
+**Live app:** https://YOUR-LINK.vercel.app  
 **AI disclosure:** this project was built with the help of Claude (Anthropic) as an AI coding assistant. I reviewed and tested the code.
 
 ## Brief to implementation
@@ -18,7 +18,7 @@ Web app for a UK utility's day-ahead power buying team. Using only Elexon BMRS n
 | Forecasts: WINDFOR `startTime`, `publishTime`, `generation` | `elexon.fetch_raw` (`publishDateTimeFrom/To`), all publish vintages kept |
 | National wind from Elexon only | No other data sources anywhere |
 | React frontend, Python backend, Docker | `frontend/` (React), `backend/` (FastAPI), `Dockerfile` |
-| Deploy on Vercel or Heroku | Heroku container deploy, see below |
+| Deploy on Vercel or Heroku | Vercel (free Hobby plan): `vercel.json` + `api/index.py`. Container hosts (Heroku, Render) also supported via `Dockerfile` / `heroku.yml` |
 | README: files, how to start, deployed link | This file |
 | AI usage disclosed | Above |
 
@@ -45,6 +45,8 @@ backend/elexon.py          Elexon client (retries, chunking, cache), hourly alig
 backend/analysis.py        pure functions: cutoff selection, metrics, bands, procurement, quality
 backend/main.py            FastAPI app: /api/health, decision, decision.csv, procurement, accuracy, horizon, revisions, quality, series
 backend/snapshot.py        one-off script that stores the January data in backend/data/ (commit it)
+api/index.py               Vercel serverless entrypoint (wraps backend/main.py)
+vercel.json, requirements.txt, .python-version   Vercel build and runtime config
 backend/test_*.py          pytest: analysis logic, API behaviour, security headers (25 tests)
 frontend/src/api.test.js   vitest unit tests
 .env.example               documented environment variables (placeholders only)
@@ -76,8 +78,17 @@ Data source order: committed snapshot in `backend/data/`, otherwise a live Elexo
 Without Docker: `cd backend && uvicorn main:app --reload`, then `cd frontend && npm i && npm run dev` (http://localhost:5173).  
 Tests and lint: `cd backend && pytest && ruff check .` and `cd frontend && npm test` (CI runs all of these plus the frontend build; needs Node 22+).
 
-## Deploy (Heroku, container stack)
+## Deploy on Vercel (free Hobby plan)
+    npm install -g vercel
+    vercel login
+    vercel deploy --prod --yes
+Vercel builds the React app (`frontend/`) as static files and runs the FastAPI backend as a Python function (`api/index.py`).
+On a cold start the function loads the committed snapshot (`backend/data/`) on the first request, so it never needs to call Elexon at runtime.
+Python functions are limited to 500 MB per Vercel's docs; this app's dependencies are far below that.
+
+## Deploy on a container host instead (optional, paid on Heroku)
     heroku create && heroku stack:set container && git push heroku main
+Heroku has no free tier (Eco dynos are $5/month). `Dockerfile` also works on Render and similar hosts.
 
 ## Security and verification notes
 - Read-only app: no accounts, database or user uploads. Responses carry security headers (CSP, nosniff, frame deny) and API responses are not cached.

@@ -25,9 +25,20 @@ def load_sync():
         STATE.update(status="error", error=str(e))
 
 
+_LOCK = threading.Lock()
+
+
+def ensure_loaded():
+    """Load data once. Used by the startup thread and, on serverless hosts, by the first request."""
+    if STATE["status"] == "idle":
+        with _LOCK:
+            if STATE["status"] == "idle":
+                load_sync()
+
+
 @asynccontextmanager
 async def lifespan(_):
-    threading.Thread(target=load_sync, daemon=True).start()
+    threading.Thread(target=ensure_loaded, daemon=True).start()
     yield
 
 
@@ -48,6 +59,7 @@ async def security_headers(request, call_next):
 
 
 def data():
+    ensure_loaded()
     if STATE["status"] != "ready":
         raise HTTPException(503, f"Data {STATE['status']}" + (f": {STATE['error']}" if STATE["error"] else ""))
     return STATE["A"], STATE["F"], STATE["demo"]
@@ -80,6 +92,7 @@ CUT = Query(9, ge=0, le=23, description="Decision cutoff hour (UTC) on D-1")
 
 @app.get("/api/health")
 def health():
+    ensure_loaded()
     return {"status": STATE["status"], "error": STATE["error"], "demo_data": STATE["demo"], "source": STATE["source"]}
 
 
