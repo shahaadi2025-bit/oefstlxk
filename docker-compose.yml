@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      - DEMO_MODE=${DEMO_MODE:-0}
+    volumes:
+      - wind_cache:/tmp/wind_cache
+volumes:
+  wind_cache:
