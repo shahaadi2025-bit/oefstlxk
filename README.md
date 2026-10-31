@@ -6,7 +6,6 @@ Web app for a UK utility's day-ahead power buying team. Using only Elexon BMRS n
 2. **How accurate has that forecast been, and how much cover does that imply?**
 
 **Live app:** <ADD LIVE LINK>  
-**AI disclosure:** this project was built with the help of Claude (Anthropic) as an AI coding assistant. I reviewed and tested the code.
 
 ## Brief to implementation
 | Requirement in the brief | Where it is met |
