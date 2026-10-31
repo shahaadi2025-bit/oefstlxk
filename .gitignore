@@ -8,5 +8,3 @@ frontend/dist
 venv
 backend/static
 .vercel
-
-.vercel

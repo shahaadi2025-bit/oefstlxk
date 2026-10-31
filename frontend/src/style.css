@@ -1,3 +1,38 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn tokens mapped onto the WindDesk palette so the ui/ components match the app */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+}
+:root {
+  --background:#07090c;--foreground:#eef2f6;--primary:#c8ff3e;--primary-foreground:#07090c;
+  --secondary:#121821;--secondary-foreground:#eef2f6;--muted:#121821;--muted-foreground:#9aa7b8;
+  --accent:#1a2330;--accent-foreground:#eef2f6;--destructive:#ff6b6b;--input:#2a3646;--ring:#c8ff3e;
+  /* status colours (hex: Tailwind only emits --color-* theme vars that a utility uses) */
+  --destructive-foreground:#f87171;--info:#3b82f6;--info-foreground:#60a5fa;
+  --success:#10b981;--success-foreground:#34d399;--warning:#f59e0b;--warning-foreground:#fbbf24;
+}
+
 :root{
   color-scheme:dark;
   --bg:#07090c;--surface:#0d1117;--surface-2:#121821;--line:#1a222d;--line-2:#2a3646;
@@ -11,15 +46,15 @@
 html{-webkit-text-size-adjust:100%}
 body{margin:0;min-height:100vh;background-attachment:fixed;background-color:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5;
   background-image:radial-gradient(1200px 500px at 85% -10%,#c8ff3e0f,transparent 60%),radial-gradient(900px 400px at -10% 10%,#5ad1ff0d,transparent 55%)}
-h1,h3{font-family:var(--display);margin:0;letter-spacing:-.02em}
-h3{font-size:1.15rem;font-weight:600}
+h1,h2,h3{font-family:var(--display);margin:0;letter-spacing:-.02em}
+h3,.panel-head h2{font-size:1.15rem;font-weight:600}
 a{color:inherit}
 :focus-visible{outline:2px solid var(--lime);outline-offset:2px;border-radius:6px}
 
 /* top bar */
 .top{position:sticky;top:0;z-index:20;background:#07090ccc;backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .top-in{max-width:1180px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:1.1rem;letter-spacing:-.01em}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;font-family:var(--display);font-weight:700;font-size:1.1rem;letter-spacing:-.01em}
 nav[role=tablist]{display:flex;gap:4px;flex:1;overflow-x:auto;scrollbar-width:none}
 nav[role=tablist]::-webkit-scrollbar{display:none}
 nav button{background:none;border:0;color:var(--mut);font:inherit;font-weight:500;padding:8px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s}
@@ -37,7 +72,7 @@ nav button[aria-selected=true]{color:#07090c;background:var(--lime);font-weight:
 .flow{fill:none;stroke:var(--lime);stroke-width:1.2;stroke-dasharray:6 14;animation:flow 14s linear infinite}
 @keyframes flow{to{stroke-dashoffset:-400}}
 .intro-copy{position:relative;max-width:640px}
-.intro h1{font-size:clamp(2rem,5vw,3.3rem);line-height:1.04;font-weight:700;margin-bottom:12px}
+.intro-title{font-size:clamp(2rem,5vw,3.3rem);line-height:1.04;font-weight:700;margin-bottom:12px}
 .intro p{color:var(--mut);font-size:1.05rem;margin:0 0 10px;max-width:560px}
 .pill{display:inline-block;background:#ffb02022;color:var(--warn);border:1px solid #ffb02055;border-radius:999px;padding:3px 12px;font-size:.75rem;font-weight:600}
 .clock{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:0;list-style:none;margin:26px 0 0;padding:0;border-top:1px solid var(--line-2)}
@@ -110,7 +145,8 @@ tbody tr:hover{background:var(--surface-2)}
 footer{max-width:1180px;margin:0 auto;padding:8px 20px 40px;color:var(--dim);font-size:.78rem}
 
 /* responsive */
-@media (max-width:1000px){.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1000px){.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  nav[role=tablist]{order:3;flex-basis:100%}.cutoff{margin-left:auto}}
 @media (max-width:760px){
   .grid-2{grid-template-columns:1fr}
   .top-in{padding:10px 14px;gap:10px}nav[role=tablist]{order:3;flex-basis:100%}.cutoff{margin-left:auto}.cutoff span{display:none}
@@ -123,3 +159,32 @@ footer{max-width:1180px;margin:0 auto;padding:8px 20px 40px;color:var(--dim);fon
 }
 @media (max-width:420px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.form-row{grid-template-columns:1fr}.stat-value{font-size:1.5rem}}
 @media (prefers-reduced-motion:reduce){.flow,.skeleton{animation:none}}
+
+/* month browser */
+.wheel-shell{height:min(640px,76vh);min-height:440px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.cta-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;position:relative}
+.day-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.day-grid a{display:block;text-decoration:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2)}
+.day-grid img{width:100%;height:auto;display:block}
+.day-grid span{display:block;padding:8px 10px;font-size:.82rem;color:var(--mut)}
+
+.skip-link{position:absolute;left:-9999px;top:8px;z-index:200}
+.skip-link:focus{left:12px;background:#c8ff3e;color:#07090c;padding:9px 16px;border-radius:10px;font-weight:600;text-decoration:none}
+#content:focus{outline:none}
+
+/* landing page */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .85s cubic-bezier(.2,.7,.2,1),transform .85s cubic-bezier(.2,.7,.2,1);transition-delay:var(--d,0ms)}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+.landing ::selection{background:#c8ff3e;color:#07090c}
+html{scroll-behavior:auto}
+
+/* ThreeUI Sylva scene: the HTML scales from its own viewport (1600x880 design; single column under 900px) */
+.sylva-frame{height:clamp(560px,55vw,1060px)}
+@media (max-width:900px){.sylva-frame{height:calc(100vw * 2.14)}}
+.threeui-background{position:relative;isolation:isolate;background:#030304}
+
+.loading-panel{position:relative;height:320px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#000}
+.loading-hive{position:absolute;inset:0;opacity:.7}
+.loading-copy{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:0 24px;background:radial-gradient(ellipse at center,rgba(7,9,12,.75),transparent 70%)}
+.loading-copy strong{font-family:var(--display);font-size:1.4rem}.loading-copy span{color:var(--mut);font-size:.9rem;max-width:420px}

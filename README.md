@@ -5,7 +5,7 @@ Web app for a UK utility's day-ahead power buying team. Using only Elexon BMRS n
 1. **Which wind forecast did we actually have when we had to decide?**
 2. **How accurate has that forecast been, and how much cover does that imply?**
 
-**Live app:** https://YOUR-LINK.vercel.app  
+**Live app:** <ADD LIVE LINK>  
 **AI disclosure:** this project was built with the help of Claude (Anthropic) as an AI coding assistant. I reviewed and tested the code.
 
 ## Brief to implementation
@@ -30,9 +30,12 @@ Web app for a UK utility's day-ahead power buying team. Using only Elexon BMRS n
 - All timestamps UTC (January is GMT, so UK local time is identical).
 
 ## Design
-Dark, high-contrast data-product UI. Space Grotesk and Inter are bundled locally (no external requests, works under the CSP). Tabular numerals for all figures, custom chart tooltips, skeleton loaders, and an SVG wind-field header that respects reduced-motion settings.
+React 18 + TypeScript + Tailwind CSS v4 with a shadcn-style structure (`@/` alias, `components.json`, `src/components/ui`). The liquid-glass and metal buttons and the works-wheel are third-party shadcn-style components adapted for this product (changes are marked `WindDesk:` in the source). Dark, high-contrast data-product UI. Space Grotesk and Inter are bundled locally (no external requests, works under the CSP). Tabular numerals for all figures, custom chart tooltips, skeleton loaders, and an SVG wind-field header that respects reduced-motion settings.
 
 ## Features
+- **Landing page:** full-screen Three.js hero (turbines, wind streamlines, dusk terrain), an interactive cutoff explainer, a live-data chart and counters, feature cards that deep-link into the dashboard, method notes and FAQ. Routes are hash-based (`#app`, `#app/<tab>`, `#day=YYYY-MM-DD`), so it stays a pure static site.
+- **Closing scene (ThreeUI Sylva, living-green):** a Three.js world with moss, ferns, pollen and a butterfly, with its copy rewritten for WindDesk (`Read the wind before you buy`, 31 delivery days, 744 hours). It mounts only when scrolled near, and its buttons navigate the app (dashboard, accuracy tab, sections).
+- **Month browser:** a 3D wheel of all 31 delivery days (each card is a small forecast-vs-actual chart built from the real data); click or press Enter to open that day. Phones get a card grid instead.
 - **Decision day:** 24 hourly periods, forecast at cutoff with publish time, P10-P90 range from errors known before that day, CSV export.
 - **Procurement cover calculator:** extra MWh to buy at a chosen confidence (illustrative, flat demand).
 - **Accuracy:** metrics above plus a skill score against a naive benchmark (actual 48 hours earlier).
@@ -51,7 +54,13 @@ backend/test_*.py          pytest: analysis logic, API behaviour, security heade
 frontend/src/api.test.js   vitest unit tests
 .env.example               documented environment variables (placeholders only)
 backend/ruff.toml          lint config
-frontend/src/              React (Vite + Recharts): App, Hero, Decision, Accuracy, Revisions, Quality, api.js
+frontend/src/              React + TypeScript (Vite, Tailwind v4, Recharts): App, Hero, Decision, MonthBrowser, Accuracy, Revisions, Quality, api.js
+frontend/src/landing/      Landing.tsx, CutoffExplainer.tsx, hooks.tsx (live stats, reveal, counters)
+frontend/src/scene/windScene.js, WindScene.tsx   Three.js hero scene (lazy-loaded; pauses off-screen; static frame for reduced motion)
+frontend/src/Root.tsx      hash router: landing vs dashboard
+frontend/src/components/ui shadcn-style components: aero-hero.tsx, liquid-glass-button.tsx (LiquidButton, MetalButton), works-wheel.tsx, button.tsx
+frontend/components.json, tsconfig.json   shadcn and TypeScript configuration
+scripts/build_sylva_html.py  reproducible copy-only tailoring of the ThreeUI scene HTML
 scripts/probe_elexon.py    live probe of the two Elexon endpoints
 scripts/check_contract.py  compares the endpoints/parameters this app uses with Elexon's official OpenAPI spec
 docs/                      video scripts and submission checklist
@@ -76,7 +85,7 @@ Data source order: committed snapshot in `backend/data/`, otherwise a live Elexo
     docker compose up --build            # http://localhost:8000
 
 Without Docker: `cd backend && uvicorn main:app --reload`, then `cd frontend && npm i && npm run dev` (http://localhost:5173).  
-Tests and lint: `cd backend && pytest && ruff check .` and `cd frontend && npm test` (CI runs all of these plus the frontend build; needs Node 22+).
+Tests and lint: `cd backend && pytest && ruff check .` and `cd frontend && npm run typecheck && npm test` (CI runs all of these plus the frontend build; needs Node 22+).
 
 ## Deploy on Vercel (free Hobby plan)
     npm install -g vercel
@@ -98,6 +107,25 @@ Heroku has no free tier (Eco dynos are $5/month). `Dockerfile` also works on Ren
 
 ## Data licence
 Contains BMRS data © Elexon Limited copyright and database right (subject to Elexon's BMRS Data Licence Terms).
+
+## ThreeUI Sylva integration
+- `frontend/src/vendor/threeui/` holds the three small component files from `@designcodeio/threeui` 1.2.0 (MIT) with two small marked `WindDesk:` edits in `LandingPages.js` and `pageTypography.js` (the accessible title says WindDesk; the blank initial iframe document is not customised, which would violate the strict CSP); `frontend/public/landing-pages/` holds the scene HTML and its assets. The package's 73 KB shared stylesheet is not imported (it styles the whole library); the two rules this scene needs are in `style.css`.
+- The HTML is a single file with inline scripts, so `/landing-pages/*` (and only that path) gets its own CSP (`script-src 'unsafe-inline'`, `frame-ancestors 'self'`) in `backend/main.py` and `vercel.json`. Every other path keeps the strict policy with no inline scripts.
+- The copy is changed by `python scripts/build_sylva_html.py`, which verifies the canonical file's SHA-256 and requires each replacement to match exactly once.
+- `frontend/src/components/ui/hive.tsx` is a fragment-shader background (supplied source, tinted to the brand palette, paused off-screen) used as the dashboard loading panel.
+
+## Browser notes
+The liquid-glass button's refraction uses `backdrop-filter: url(#svg-filter)`, which only Chromium browsers render; in Safari and Firefox the button falls back to a flat transparent style and stays fully usable. The Month wheel needs a pointer or keyboard; touch phones get the card grid.
+
+The hero needs WebGL; without it (or if it fails) the page shows a static gradient with an SVG wind field. With `prefers-reduced-motion` the scene renders a single still frame.
+
+## Operations and security
+- **Configuration:** see `.env.example`. No secret, key or token exists in this project; everything is optional. `DEMO_MODE` is refused when `VERCEL_ENV` or `APP_ENV` is `production`, so synthetic data can never be served live.
+- **Headers:** one policy module (`backend/security.py`) drives the API server and `vercel.json` (a test fails if they diverge). Strict CSP with no inline scripts or `eval`, HSTS, nosniff, no-referrer, Permissions-Policy, COOP/CORP, frame denial. The only relaxed policy is for `/landing-pages/*` (the self-hosted 3D scene), which may be framed only by this site.
+- **API:** read-only `GET`s, validated and length-limited inputs, no CORS (same origin only), rate limiting per client IP, generic error messages (details go to server logs only), API docs disabled.
+- **Caching:** content-hashed assets are immutable for a year; HTML is always revalidated; API data is cached for 5 minutes; health is never cached.
+- **Verify a deployment:** `python scripts/verify_deployment.py https://your-site` runs the header, caching, stale-build, asset-integrity and API checks (it exits non-zero on any failure).
+- **Scaling note:** the rate limiter and its counters live in each server instance. On Vercel, add the platform firewall rules for global limits.
 
 ## Limitations
 - Error bands use only errors known before the delivery day; the earliest days fall back to the whole window and the UI says so.

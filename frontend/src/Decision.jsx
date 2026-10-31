@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { MetalButton } from "@/components/ui/liquid-glass-button";
 import { fmt, useApi } from "./api.js";
 import { ChartTip, Field, Key, Notice, Panel, Skeleton, Stat } from "./ui.jsx";
 
 const AX = { stroke: "var(--line-2)", tick: { fill: "var(--dim)", fontSize: 11 }, tickLine: false };
 
-export default function Decision({ cutoff }) {
-  const [date, setDate] = useState("2026-01-15");
+export default function Decision({ cutoff, date, setDate }) {
   const [demand, setDemand] = useState(25000);
   const [conf, setConf] = useState(0.95);
   const [showActual, setShowActual] = useState(true);
@@ -21,7 +21,7 @@ export default function Decision({ cutoff }) {
       <Panel kicker="Delivery day" title="Forecast the desk had at the cutoff"
         actions={<>
           <Field label="Delivery day"><input type="date" min="2026-01-02" max="2026-02-01" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-          <a className="btn ghost" href={`/api/decision.csv?${q}`}>Export CSV</a>
+          <MetalButton variant="success" className="text-[#04140e] [text-shadow:none]" onClick={() => window.location.assign(`/api/decision.csv?${q}`)}>Export CSV</MetalButton>
         </>}>
         {d.err && <Notice>{d.err}</Notice>}
         <div className="legend">

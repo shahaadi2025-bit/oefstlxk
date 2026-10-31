@@ -96,3 +96,117 @@ def test_first_request_loads_data_when_idle(client):
         assert client.get("/api/health").json()["status"] == "ready"
     finally:
         main.STATE.update(saved)
+
+
+def test_scene_path_gets_framing_csp_but_app_stays_strict(client):
+    scene = client.get("/landing-pages/inner-green-3d.html").headers
+    assert scene["x-frame-options"] == "SAMEORIGIN" and "frame-ancestors 'self'" in scene["content-security-policy"]
+    assert "script-src 'self' 'unsafe-inline'" in scene["content-security-policy"]
+    app = client.get("/api/health").headers
+    assert app["x-frame-options"] == "DENY"
+    csp = app["content-security-policy"]
+    assert "script-src 'self';" in csp and "unsafe-inline" not in csp.split("style-src-attr")[0]
+
+
+def test_health_does_not_leak_internals(client):
+    h = client.get("/api/health").json()
+    assert set(h) == {"status", "error", "demo_data"}
+
+
+def test_error_state_is_generic(client):
+    import main
+    saved = dict(main.STATE)
+    main.STATE.update(status="error", error=main.GENERIC_UNAVAILABLE)
+    try:
+        r = client.get("/api/accuracy")
+        assert r.status_code == 503 and r.json()["detail"] == main.GENERIC_UNAVAILABLE
+        assert "Traceback" not in r.text and "elexon" not in r.text.lower()
+    finally:
+        main.STATE.update(saved)
+
+
+def test_unhandled_exception_is_sanitised(client, monkeypatch):
+    import analysis
+    import main
+    def boom(_):
+        raise RuntimeError("secret internal detail /srv/app")
+
+    monkeypatch.setattr(analysis, "metrics", boom)
+    r = client.get("/api/accuracy")
+    assert r.status_code == 500 and r.json() == {"detail": "Internal server error"}
+    assert r.headers["x-frame-options"] == "DENY"  # headers still applied on errors
+    main.STATE.get("status")
+
+
+def test_api_docs_hidden_by_default(client):
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_full_security_header_set(client):
+    h = client.get("/api/health").headers
+    for k in ["strict-transport-security", "x-content-type-options", "referrer-policy", "permissions-policy",
+              "cross-origin-opener-policy", "cross-origin-resource-policy", "x-frame-options",
+              "content-security-policy"]:
+        assert k in h, k
+    csp = h["content-security-policy"]
+    assert "unsafe-eval" not in csp and "*" not in csp and "script-src 'self';" in csp and "object-src 'none'" in csp
+
+
+def test_cache_policy(client):
+    assert client.get("/api/health").headers["cache-control"] == "no-store"
+    assert "max-age=300" in client.get("/api/accuracy").headers["cache-control"]
+    assert client.get("/api/decision?date=bad").headers["cache-control"] == "no-store"
+    import security
+    assert security.cache_for("/assets/index-abc.js", 200) == security.IMMUTABLE
+
+
+def test_rate_limit_returns_429_with_retry_after(client, monkeypatch):
+    import main
+    monkeypatch.setattr(main, "RATE_LIMIT", 3)
+    main._hits.clear()
+    codes = [client.get("/api/health").status_code for _ in range(5)]
+    assert codes[:3] == [200, 200, 200] and codes[3:] == [429, 429]
+    r = client.get("/api/health")
+    assert r.headers["retry-after"] == "30" and "x-content-type-options" in r.headers
+    main._hits.clear()
+
+
+def test_input_length_limits(client):
+    assert client.get("/api/decision?date=" + "x" * 500).status_code == 422
+    assert client.get("/api/revisions?target=" + "x" * 500).status_code == 422
+
+
+def test_no_cors_headers_for_foreign_origin(client):
+    r = client.get("/api/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in r.headers
+    pre = client.options(
+        "/api/health", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
+    assert "access-control-allow-origin" not in pre.headers
+
+
+def test_demo_mode_refused_in_production(monkeypatch):
+    import main
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("DEMO_MODE", "1")
+    saved = dict(main.STATE)
+    try:
+        main.load_sync()
+        assert main.STATE["status"] == "error" and main.STATE["A"] is saved["A"]
+    finally:
+        main.STATE.update(saved)
+
+
+def test_vercel_json_matches_server_policy():
+    import json
+    import pathlib
+
+    import security
+    cfg = json.loads((pathlib.Path(__file__).resolve().parent.parent / "vercel.json").read_text())
+    by_source = {h["source"]: {x["key"]: x["value"] for x in h["headers"]} for h in cfg["headers"]}
+    scene = next(v for k, v in by_source.items() if k.startswith("/landing-pages/(.*)") or k == "/landing-pages/(.*)")
+    default = next(v for k, v in by_source.items() if k.startswith("/((?!landing-pages/)"))
+    assert default["Content-Security-Policy"] == security.STRICT_CSP
+    assert scene["Content-Security-Policy"] == security.SCENE_CSP
+    for k, v in security.COMMON_HEADERS.items():
+        assert default[k] == v and scene[k] == v

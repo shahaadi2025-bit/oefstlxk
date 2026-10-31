@@ -1,10 +1,11 @@
 // Small design-system primitives shared by every view.
-export function Panel({ title, kicker, actions, children, className = "" }) {
+/** @param {{ title?: string, kicker?: string, actions?: any, children?: any, className?: string }} props */
+export function Panel({ title = "", kicker = "", actions = null, children = null, className = "" }) {
   return (
     <section className={`panel ${className}`}>
       {(title || actions) && (
         <header className="panel-head">
-          <div>{kicker && <div className="kicker">{kicker}</div>}{title && <h3>{title}</h3>}</div>
+          <div>{kicker && <div className="kicker">{kicker}</div>}{title && <h2>{title}</h2>}</div>
           {actions && <div className="panel-actions">{actions}</div>}
         </header>
       )}
@@ -21,6 +22,18 @@ export function Stat({ label, value, unit, hint, tone }) {
       {hint && <div className="stat-hint">{hint}</div>}
     </div>
   );
+}
+
+export function SkipLink() {
+  const jump = (e) => {
+    e.preventDefault();
+    const el = document.getElementById("content");
+    if (!el) return;
+    el.setAttribute("tabindex", "-1");
+    el.focus();
+    el.scrollIntoView();
+  };
+  return <a className="skip-link" href="#content" onClick={jump}>Skip to content</a>;
 }
 
 export const Skeleton = ({ h = 280 }) => <div className="skeleton" style={{ height: h }} aria-hidden="true" />;

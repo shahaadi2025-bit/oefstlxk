@@ -1,28 +1,42 @@
 import logging
 import os
 import threading
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import analysis
 import elexon
+import security
 
 log = logging.getLogger("app")
-STATE = {"status": "idle", "error": None, "A": None, "F": None, "demo": False, "source": None}
+STATE = {"status": "idle", "error": None, "A": None, "F": None, "demo": False}
+GENERIC_UNAVAILABLE = "The data service is temporarily unavailable. Please try again shortly."
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MIN", "240"))  # per client IP, per instance
+_hits: dict[str, deque] = {}
+
+
+def _is_production() -> bool:
+    return os.environ.get("VERCEL_ENV") == "production" or os.environ.get("APP_ENV") == "production"
 
 
 def load_sync():
     STATE.update(status="loading", error=None)
     try:
+        if _is_production() and os.environ.get("DEMO_MODE") == "1":
+            raise RuntimeError("DEMO_MODE must not be enabled in production")
         (A, F), source = elexon.load()
-        STATE.update(A=A, F=F, demo=source == "demo", source=source, status="ready")
-    except Exception as e:  # surfaced to the UI via /api/health
+        STATE.update(A=A, F=F, demo=source == "demo", status="ready")
+    except Exception:  # details go to the server log only, never to the client
         log.exception("data load failed")
-        STATE.update(status="error", error=str(e))
+        STATE.update(status="error", error=GENERIC_UNAVAILABLE)
 
 
 _LOCK = threading.Lock()
@@ -42,26 +56,65 @@ async def lifespan(_):
     yield
 
 
-app = FastAPI(title="Wind Forecast Evaluator", lifespan=lifespan)
+_docs = os.environ.get("ENABLE_DOCS") == "1"
+app = FastAPI(
+    title="WindDesk API",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if _docs else None,
+)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+if os.environ.get("ALLOWED_HOSTS"):
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=[h.strip() for h in os.environ["ALLOWED_HOSTS"].split(",")])
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:  # the entry added by the nearest trusted proxy is the last one
+        return fwd.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _allow(request: Request) -> bool:
+    now = time.monotonic()
+    q = _hits.setdefault(_client_ip(request), deque())
+    while q and now - q[0] > 60:
+        q.popleft()
+    if len(q) >= RATE_LIMIT:
+        return False
+    q.append(now)
+    if len(_hits) > 5000:  # bound memory
+        for k in [k for k, v in _hits.items() if not v or now - v[-1] > 60]:
+            _hits.pop(k, None)
+    return True
 
 
 @app.middleware("http")
-async def security_headers(request, call_next):
-    resp = await call_next(request)
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
-    resp.headers["Referrer-Policy"] = "no-referrer"
-    resp.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
-    if request.url.path.startswith("/api/"):
-        resp.headers["Cache-Control"] = "no-store"
+async def guard(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and not _allow(request):
+        resp = JSONResponse({"detail": "Too many requests"}, status_code=429, headers={"Retry-After": "30"})
+    else:
+        try:
+            resp = await call_next(request)
+        except Exception:
+            log.exception("unhandled error on %s", path)
+            resp = JSONResponse({"detail": "Internal server error"}, status_code=500)
+    for k, v in security.headers_for(path).items():
+        resp.headers[k] = v
+    cache = security.cache_for(path, resp.status_code)
+    if cache:
+        resp.headers["Cache-Control"] = cache
+    elif "cache-control" not in resp.headers and not path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-cache"
     return resp
 
 
 def data():
     ensure_loaded()
     if STATE["status"] != "ready":
-        raise HTTPException(503, f"Data {STATE['status']}" + (f": {STATE['error']}" if STATE["error"] else ""))
+        raise HTTPException(503, GENERIC_UNAVAILABLE if STATE["status"] == "error" else "Data is still loading")
     return STATE["A"], STATE["F"], STATE["demo"]
 
 
@@ -88,16 +141,18 @@ def _clean(df):
 
 
 CUT = Query(9, ge=0, le=23, description="Decision cutoff hour (UTC) on D-1")
+DATE_Q = Query("2026-01-15", max_length=32)
 
 
 @app.get("/api/health")
 def health():
     ensure_loaded()
-    return {"status": STATE["status"], "error": STATE["error"], "demo_data": STATE["demo"], "source": STATE["source"]}
+    return {"status": STATE["status"], "error": STATE["error"], "demo_data": STATE["demo"]}
 
 
 @app.get("/api/series")
-def series(start: str = "2026-01-02", end: str = "2026-01-09", cutoff_hour: int = CUT):
+def series(start: str = Query("2026-01-02", max_length=32), end: str = Query("2026-01-09", max_length=32),
+           cutoff_hour: int = CUT):
     A, F, demo = data()
     s, e = _day(start), _parse(end)
     d = analysis.joined(A, F, cutoff_hour)
@@ -118,7 +173,7 @@ def _decision(date, cutoff_hour):
 
 
 @app.get("/api/decision")
-def decision(date: str = "2026-01-15", cutoff_hour: int = CUT):
+def decision(date: str = DATE_Q, cutoff_hour: int = CUT):
     d, e, fallback, demo = _decision(date, cutoff_hour)
     out = d.assign(t=_ts(d.startTime), published=_ts(d.publishTime))
     rows = _clean(out[["t", "forecast", "published", "lo", "hi", "actual"]].round(1)).to_dict("records")
@@ -127,7 +182,7 @@ def decision(date: str = "2026-01-15", cutoff_hour: int = CUT):
 
 
 @app.get("/api/decision.csv")
-def decision_csv(date: str = "2026-01-15", cutoff_hour: int = CUT):
+def decision_csv(date: str = DATE_Q, cutoff_hour: int = CUT):
     d, _, _, _ = _decision(date, cutoff_hour)
     day = _day(date).strftime("%Y-%m-%d")  # validated, so safe to put in a header
     out = d.assign(target_time_utc=_ts(d.startTime), forecast_published_utc=_ts(d.publishTime))
@@ -139,7 +194,7 @@ def decision_csv(date: str = "2026-01-15", cutoff_hour: int = CUT):
 
 
 @app.get("/api/procurement")
-def procurement(date: str = "2026-01-15", cutoff_hour: int = CUT, demand_mw: float = Query(25000, ge=0, le=100000),
+def procurement(date: str = DATE_Q, cutoff_hour: int = CUT, demand_mw: float = Query(25000, ge=0, le=100000),
                 confidence: float = Query(0.95, ge=0.5, le=0.999)):
     d, e, fallback, demo = _decision(date, cutoff_hour)
     return {"demo_data": demo, "confidence": confidence, "band_uses_all_history": fallback,
@@ -164,7 +219,7 @@ def horizon():
 
 
 @app.get("/api/revisions")
-def revisions(target: str, cutoff_hour: int = CUT):
+def revisions(target: str = Query(max_length=40), cutoff_hour: int = CUT):
     A, F, demo = data()
     try:
         t = pd.Timestamp(target)

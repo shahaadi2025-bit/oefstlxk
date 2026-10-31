@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 
 export async function api(path) {
-  const r = await fetch(path);
+  let r;
+  try {
+    r = await fetch(path);
+  } catch {
+    throw new Error("Could not reach the server. Check your connection and try again.");
+  }
   if (!r.ok) {
     let m = r.statusText;
     try { m = (await r.json()).detail || m; } catch { /* non-JSON error body */ }
@@ -13,15 +18,16 @@ export async function api(path) {
 export const fmt = (n) => (n == null || Number.isNaN(n) ? "–" : Math.round(n).toLocaleString());
 
 export function useApi(path) {
-  const [s, set] = useState({ data: null, err: "", loading: !!path });
+  const [res, setRes] = useState({ path: null, data: null, err: "" });
   useEffect(() => {
-    if (!path) { set({ data: null, err: "", loading: false }); return undefined; }
+    if (!path) return undefined;
     let live = true;
-    set((x) => ({ ...x, loading: true, err: "" }));
     api(path)
-      .then((d) => live && set({ data: d, err: "", loading: false }))
-      .catch((e) => live && set({ data: null, err: e.message, loading: false }));
+      .then((data) => live && setRes({ path, data, err: "" }))
+      .catch((e) => live && setRes({ path, data: null, err: e.message }));
     return () => { live = false; };
   }, [path]);
-  return s;
+  const settled = res.path === path;
+  // Previous data stays visible while a new request is in flight (no flicker).
+  return { data: path ? res.data : null, err: settled ? res.err : "", loading: !!path && !settled };
 }
