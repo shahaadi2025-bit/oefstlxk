@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 import threading
 import time
 from collections import deque
@@ -244,5 +245,8 @@ def quality(cutoff_hour: int = CUT):
     return {"demo_data": demo, **analysis.quality(A, F, s, e, cutoff_hour)}
 
 
-if os.path.isdir("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
+for _dir in (pathlib.Path("static"), pathlib.Path(__file__).resolve().parent / "static", _ROOT / "public"):
+    if (_dir / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=str(_dir), html=True), name="site")
+        break

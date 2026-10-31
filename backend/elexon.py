@@ -149,5 +149,8 @@ def load():
     snap = load_snapshot()
     if snap is not None:
         return snap, "snapshot"
+    on_host = os.environ.get("VERCEL") == "1" or os.environ.get("APP_ENV") == "production"
+    if on_host and os.environ.get("ALLOW_LIVE_FETCH") != "1":
+        raise RuntimeError("No bundled data snapshot found and live fetching is disabled in production")
     return finalize(*fetch_raw()), "live"
 

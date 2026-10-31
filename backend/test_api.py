@@ -210,3 +210,23 @@ def test_vercel_json_matches_server_policy():
     assert scene["Content-Security-Policy"] == security.SCENE_CSP
     for k, v in security.COMMON_HEADERS.items():
         assert default[k] == v and scene[k] == v
+
+
+def test_vercel_path_shim_recovers_original_api_path(client):
+    import pathlib
+    import sys
+
+    from fastapi.testclient import TestClient
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "api"))
+    import index as vercel_entry
+
+    c = TestClient(vercel_entry.app)
+    # Vercel handing us the rewrite destination: /api/index?p=<original path>&<original query>
+    r = c.get("/api/index", params={"p": "decision", "date": "2026-01-15"})
+    assert r.status_code == 200 and len(r.json()["rows"]) == 24
+    csv = c.get("/api/index", params={"p": "decision.csv", "date": "2026-01-15"})
+    assert csv.headers["content-type"].startswith("text/csv")
+    # Original path preserved: untouched
+    assert c.get("/api/health").json()["status"] == "ready"
+    assert c.get("/api/index", params={"p": "nope"}).status_code == 404
