@@ -5,7 +5,7 @@ Web app for a UK utility's day-ahead power buying team. Using only Elexon BMRS n
 1. **Which wind forecast did we actually have when we had to decide?**
 2. **How accurate has that forecast been, and how much cover does that imply?**
 
-**Live app:** <ADD LIVE LINK>  
+**Live app** <ADD LIVE LINK>  
 
 ## Brief to implementation
 | Requirement in the brief | Where it is met |
